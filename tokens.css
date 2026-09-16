@@ -1,0 +1,66 @@
+/* Hallmark · genre: modern-minimal → soft/light · app-scope
+ * Design tokens for Tab → Local LLM. Light, card-based, wine/maroon accent
+ * (re-themed from a user reference). Every colour/space/type value in the UI
+ * references a token here.
+ * pre-emit critique: P5 H4 E4 S5 R5 V4
+ */
+:root {
+  /* Surfaces — soft off-white page, white cards that lift */
+  --color-paper:      oklch(96.5% 0.006 320);  /* panel background */
+  --color-paper-2:    oklch(99.5% 0.002 320);  /* cards / inputs / bubbles (near-white) */
+  --color-paper-3:    oklch(97.5% 0.008 345);  /* subtle wine-tinted hover / user bubble */
+  --color-rule:       oklch(91% 0.010 340);    /* hairline borders */
+  --color-rule-2:     oklch(83% 0.020 348);    /* stronger border on focus / hover */
+
+  /* Text — wine-tinted near-black through muted */
+  --color-ink:        oklch(27% 0.045 350);    /* primary text / headings */
+  --color-ink-2:      oklch(45% 0.050 348);    /* muted / labels */
+  --color-ink-3:      oklch(60% 0.035 345);    /* faint / meta */
+
+  /* Accent — one hue, tonal roles */
+  --color-action:     oklch(33% 0.092 353);    /* deep maroon: primary button, capture, user */
+  --color-action-2:   oklch(39% 0.100 353);    /* maroon hover */
+  --color-action-ink: oklch(98% 0.006 350);    /* near-white text on maroon */
+  --color-model:      oklch(44% 0.100 350);    /* mid wine: model output border, links, focus */
+  --color-model-2:    oklch(51% 0.105 350);    /* wine hover */
+
+  --color-danger:     oklch(50% 0.180 25);     /* clear red for errors (distinct from wine) */
+  --color-danger-ink: oklch(99% 0.005 25);     /* text on red */
+  --color-focus:      oklch(45% 0.110 350);    /* focus ring = wine */
+
+  /* Soft elevation — the card look from the reference */
+  --shadow-sm: 0 1px 2px oklch(30% 0.05 350 / 0.06);
+  --shadow-md: 0 1px 2px oklch(30% 0.05 350 / 0.06), 0 4px 12px oklch(30% 0.05 350 / 0.06);
+
+  /* Type */
+  --font-display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+
+  --text-2xs: 0.625rem;  /* 10px */
+  --text-xs:  0.6875rem; /* 11px */
+  --text-sm:  0.75rem;   /* 12px */
+  --text-md:  0.8125rem; /* 13px — body */
+  --text-lg:  0.9375rem; /* 15px */
+  --text-xl:  1.125rem;  /* 18px */
+
+  /* 4-pt spacing scale */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs:  8px;
+  --space-sm:  12px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+
+  /* Motion */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-short:   160ms;
+  --dur-med:     240ms;
+
+  /* Radii — rounder, softer per the reference */
+  --radius-input: 10px;
+  --radius-card:  14px;
+  --radius-pill:  999px;
+}

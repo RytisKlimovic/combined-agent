@@ -1,0 +1,74 @@
+{
+  "manifest_version": 3,
+  "name": "Scribe Agent",
+  "version": "1.0.0",
+  "description": "Capture the current tab and ask a multimodal model about it — page text, whole documents, PDFs, follow-up chat and clinical form drafts.",
+  "permissions": ["activeTab", "storage", "scripting", "sidePanel", "contextMenus", "notifications", "alarms"],
+  "storage": {
+    "managed_schema": "managed-schema.json"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "file:///*/visit-note.html",
+        "file:///*/discharge-summary.html"
+      ],
+      "js": [
+        "content/field-map.js",
+        "content/form-scan.js",
+        "content/text-diff.js",
+        "content/audio-capture.js",
+        "content/dictation.js",
+        "content/content-script.js",
+        "content/open-in-tab.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content/open-in-tab-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Scribe Agent",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "commands": {
+    "open-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Open the Scribe Agent side panel"
+    }
+  }
+}

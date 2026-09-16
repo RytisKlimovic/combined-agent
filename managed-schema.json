@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "metricsEndpoint": {
+      "title": "Metrics collector address",
+      "description": "For example https://metrics.example.org (no trailing slash). When unset, metrics are only accumulated locally and exported by hand from the side panel.",
+      "type": "string"
+    },
+    "metricsToken": {
+      "title": "Ingest token",
+      "description": "Bearer token matching METRICS_TOKEN in the collector's .env file.",
+      "type": "string"
+    },
+    "metricsEnabled": {
+      "title": "Whether usage metrics are collected",
+      "description": "false disables metrics for every user in the organisation and the clinician cannot turn them back on. true does NOT lock anything — the user can still opt out themselves.",
+      "type": "boolean"
+    }
+  }
+}

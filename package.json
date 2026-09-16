@@ -1,0 +1,14 @@
+{
+  "name": "scribe-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome MV3 extension: an LLM agent that reads the current tab and drafts clinical form text under human review",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-all.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Demo EHR — outpatient visit note</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+
+<div class="warn">
+  <strong>Demo page.</strong> Every value here is fabricated. It exists only to
+  exercise the extension. Never test against real patient data.
+</div>
+
+<div class="nav">
+  Demo forms: <strong>visit note</strong> &middot;
+  <a href="discharge-summary.html">discharge summary</a>
+</div>
+
+<div class="card">
+  <h1>Patient header</h1>
+  <h2>Demo EHR &mdash; outpatient visit note</h2>
+  <div class="grid" style="margin-top:14px">
+    <div class="kv"><b>Date of birth</b><span class="patient-birth-date">1959-04-11</span></div>
+    <div class="kv"><b>Age</b><span class="patient-age">67</span></div>
+    <div class="kv"><b>Sex</b><span class="patient-sex">Male</span></div>
+    <div class="kv"><b>Reason for visit</b><span id="visit-reason">Breathlessness and leg swelling for 5 days</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Diagnoses</h2>
+  <ul class="dx-list">
+    <li class="dx-item">I50.0 Congestive heart failure</li>
+    <li class="dx-item">I10 Essential hypertension</li>
+    <li class="dx-item">E11.9 Type 2 diabetes mellitus without complications</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Vital signs</h2>
+  <div class="vitals-panel grid">
+    <div class="kv"><b>BP</b>158/94 mmHg</div>
+    <div class="kv"><b>HR</b>96 bpm</div>
+    <div class="kv"><b>SpO&#8322;</b>93 % (room air)</div>
+    <div class="kv"><b>Temp.</b>36.8 &deg;C</div>
+    <div class="kv"><b>Weight</b>91 kg (+4 kg in 2 weeks)</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Laboratory results</h2>
+  <table class="lab-results-table">
+    <tr><th>Test</th><th>Result</th><th>Reference</th></tr>
+    <tr><td>NT-proBNP</td><td>2840 pg/ml</td><td>&lt; 125</td></tr>
+    <tr><td>Creatinine</td><td>118 &micro;mol/l</td><td>62&ndash;106</td></tr>
+    <tr><td>eGFR</td><td>54 ml/min/1.73 m&sup2;</td><td>&gt; 90</td></tr>
+    <tr><td>Potassium</td><td>4.2 mmol/l</td><td>3.5&ndash;5.1</td></tr>
+    <tr><td>HbA1c</td><td>7.8 %</td><td>&lt; 7.0</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Previous notes</h2>
+  <div class="history-notes">2026-05-12 Cardiology review: echo — LVEF 38 %, moderate mitral regurgitation. Started bisoprolol 2.5 mg once daily.
+2026-03-02 Primary care: blood pressure control inadequate, ramipril 5 mg added.</div>
+</div>
+
+<div class="card">
+  <h2>Visit note</h2>
+  <!--
+    Field naming mirrors a server-rendered EHR: `name` is the model binding
+    path and is stable, `id` is derived from it and is not. In this form the
+    derivation is the plain one; discharge-summary.html shows the wrapped
+    variant with a trailing underscore. See content/field-map.js.
+  -->
+  <form id="note-form"
+        onsubmit="event.preventDefault(); alert('A human submits the form — the extension never does that automatically.');">
+
+    <label for="Note_Complaints">Complaints</label>
+    <textarea id="Note_Complaints" name="Note.Complaints"></textarea>
+
+    <label for="Note_HistoryOfIllness">History of present illness</label>
+    <textarea id="Note_HistoryOfIllness" name="Note.HistoryOfIllness"></textarea>
+
+    <label for="Note_ObjectiveStatus">Objective status</label>
+    <textarea id="Note_ObjectiveStatus" name="Note.ObjectiveStatus"></textarea>
+
+    <label for="DiagnosisBlocks_0__Rationale">Diagnosis rationale</label>
+    <textarea id="DiagnosisBlocks_0__Rationale" name="DiagnosisBlocks[0].Rationale"></textarea>
+
+    <label for="DiagnosisBlocks_0__DecisionContext">Clinical decision context</label>
+    <textarea id="DiagnosisBlocks_0__DecisionContext" name="DiagnosisBlocks[0].DecisionContext"></textarea>
+
+    <label for="TreatmentGiven">Non-pharmacological treatment given</label>
+    <textarea id="TreatmentGiven" name="TreatmentGiven"></textarea>
+
+    <label for="FollowUpRecommendations">Treatment / nursing / follow-up recommendations</label>
+    <textarea id="FollowUpRecommendations" name="FollowUpRecommendations"></textarea>
+
+    <label for="PatientInstructions">Instructions for the patient</label>
+    <textarea id="PatientInstructions" name="PatientInstructions"></textarea>
+
+    <label for="Referrals_0__AdditionalInformation">Referral additional information</label>
+    <textarea id="Referrals_0__AdditionalInformation" name="Referrals[0].AdditionalInformation"></textarea>
+
+    <!--
+      The fields below are deliberately NOT in FIELD_MAP: no draft is ever
+      generated for them. Global dictation still finds them (form-scan.js) but
+      flags them as safety-critical and leaves them unchecked by default.
+    -->
+    <div class="critical">
+      <label for="Allergies_0__Description">Allergies — description</label>
+      <textarea id="Allergies_0__Description" name="Allergies[0].Description"></textarea>
+    </div>
+
+    <div class="critical">
+      <label for="MedicationTreatment">Medication treatment</label>
+      <textarea id="MedicationTreatment" name="MedicationTreatment"></textarea>
+    </div>
+
+    <div class="critical">
+      <label for="InvestigationsDescription">Investigation results</label>
+      <textarea id="InvestigationsDescription" name="InvestigationsDescription"></textarea>
+    </div>
+
+    <!-- Administrative field — skipped entirely by form-scan.js -->
+    <label for="TemplateName">Template name</label>
+    <textarea id="TemplateName" name="TemplateName"></textarea>
+
+    <div style="margin-top:18px">
+      <button type="submit" class="submit">Submit (human only)</button>
+    </div>
+  </form>
+</div>
+
+</body>
+</html>

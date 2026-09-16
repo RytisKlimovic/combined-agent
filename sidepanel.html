@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* Hallmark · genre: soft/light · app-scope
+ * tone: soft/refined · anchor hue: wine/maroon ~352° (single accent, tonal roles)
+ * pre-emit critique: P5 H4 E5 S5 R5 V4
+ */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100vh; width: 100%;
+    background: var(--color-paper); color: var(--color-ink);
+    font-family: var(--font-body); font-size: var(--text-md);
+    overflow-x: clip;
+  }
+  body { display: flex; flex-direction: column; }
+  button { font-family: inherit; }
+
+  /* ---- Top bar: brand + view switcher --------------------------------- */
+  .topbar {
+    display: flex; align-items: center; gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid var(--color-rule);
+    flex: 0 0 auto;
+  }
+  .brand { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
+  .brand-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--color-action);
+    box-shadow: 0 0 0 0 oklch(40% 0.10 352 / 0.5);
+  }
+  .brand-dot.live { animation: pulse 1s var(--ease-out) infinite; }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 oklch(40% 0.10 352 / 0.5); }
+    100% { box-shadow: 0 0 0 6px oklch(40% 0.10 352 / 0); }
+  }
+
+  .views { display: flex; gap: var(--space-3xs); }
+  .viewtab {
+    position: relative;
+    background: none; border: none; cursor: pointer;
+    color: var(--color-ink-2); font-size: var(--text-sm);
+    padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-input);
+    transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+  }
+  .viewtab:hover { color: var(--color-ink); background: var(--color-paper-3); }
+  .viewtab.is-active { color: var(--color-action); font-weight: 600; background: var(--color-paper-3); }
+  .viewtab[data-view="watch"].running::after {
+    content: ""; position: absolute; top: 4px; right: 4px;
+    width: 5px; height: 5px; border-radius: 50%; background: var(--color-action);
+  }
+  .icontab {
+    background: none; border: none; cursor: pointer; color: var(--color-ink-2);
+    font-size: var(--text-lg); padding: var(--space-2xs) var(--space-xs);
+    border-radius: var(--radius-input);
+  }
+  .icontab:hover { color: var(--color-ink); background: var(--color-paper-2); }
+  .icontab.is-active { color: var(--color-ink); background: var(--color-paper-3); }
+  /* Settings button — the same wine colour as Send, so it reads as a control */
+  #gear { margin-left: auto; background: var(--color-action); color: var(--color-action-ink);
+    box-shadow: var(--shadow-sm); }
+  #gear:hover, #gear.is-active { background: var(--color-action-2); color: var(--color-action-ink); }
+
+  /* ---- View plumbing --------------------------------------------------- */
+  .view { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+  .view.is-active { display: flex; }
+
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+  /* ---- Shared form controls ------------------------------------------- */
+  label.field {
+    display: block; font-family: var(--font-mono); font-size: var(--text-2xs);
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-ink-2);
+    margin: 0 0 var(--space-2xs) 2px;
+  }
+  input[type="text"], input[type="password"], input[type="number"], select {
+    width: 100%; background: var(--color-paper-2); color: var(--color-ink);
+    border: 1px solid var(--color-rule); border-radius: var(--radius-input);
+    padding: 8px 10px; font-family: var(--font-mono); font-size: var(--text-sm); outline: none;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-short) var(--ease-out);
+  }
+  input:focus, select:focus { border-color: var(--color-model); }
+  .row { display: flex; gap: var(--space-xs); margin-bottom: var(--space-xs); }
+  .row:last-child { margin-bottom: 0; }
+  .row > div { flex: 1; }
+
+  /* ================= CHAT VIEW ========================================= */
+  .chat-head {
+    display: flex; align-items: center; gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--color-rule);
+    flex: 0 0 auto; min-height: 0;
+  }
+  #thumbBar { display: none; align-items: center; gap: var(--space-xs); min-width: 0; flex: 1; }
+  #thumbBar.show { display: flex; }
+  #thumbImg {
+    width: 48px; height: 30px; object-fit: cover; flex: 0 0 auto;
+    border: 1px solid var(--color-rule); border-radius: 5px;
+  }
+  #thumbNote { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2);
+    line-height: 1.35; overflow: hidden; }
+  .chat-head .grow { flex: 1; }
+  .ghost-btn {
+    background: none; border: 1px solid var(--color-rule); color: var(--color-ink-2);
+    border-radius: var(--radius-input); padding: var(--space-2xs) var(--space-xs);
+    font-size: var(--text-sm); cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+    transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+  }
+  .ghost-btn:hover { color: var(--color-ink); border-color: var(--color-rule-2); }
+  /* „+ New" — vyno spalvos kaip Send */
+  #newBtn { background: var(--color-action); color: var(--color-action-ink); border: none;
+    font-weight: 650; box-shadow: var(--shadow-sm); }
+  #newBtn:hover { background: var(--color-action-2); color: var(--color-action-ink); }
+
+  /* Connection banner (unconfigured) */
+  .banner {
+    display: none; align-items: center; gap: var(--space-xs);
+    margin: var(--space-sm) var(--space-sm) 0; padding: var(--space-sm);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    border-left: 2px solid var(--color-action); border-radius: var(--radius-card);
+    font-size: var(--text-sm); color: var(--color-ink-2); flex: 0 0 auto; box-shadow: var(--shadow-md);
+  }
+  .banner.show { display: flex; }
+  .banner b { color: var(--color-ink); font-weight: 600; }
+  .banner button {
+    margin-left: auto; flex: 0 0 auto;
+    background: var(--color-action); color: var(--color-action-ink); border: none;
+    border-radius: var(--radius-input); padding: var(--space-2xs) var(--space-sm);
+    font-weight: 650; font-size: var(--text-sm); cursor: pointer;
+  }
+  .banner button:hover { background: var(--color-action-2); }
+
+  #msgs { flex: 1 1 auto; overflow-y: auto; padding: var(--space-sm);
+    display: flex; flex-direction: column; gap: var(--space-sm); }
+  #empty { margin: auto; text-align: center; color: var(--color-ink-2);
+    font-size: var(--text-sm); line-height: 1.6; max-width: 260px; }
+  #empty kbd { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-paper-2);
+    border: 1px solid var(--color-rule); border-radius: 4px; padding: 1px 5px; }
+
+  .msg { max-width: 92%; padding: var(--space-xs) 11px; border-radius: var(--radius-card);
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word; box-shadow: var(--shadow-sm); }
+  .msg.user { align-self: flex-end; background: var(--color-paper-3); border: 1px solid var(--color-rule); }
+  .msg.assistant { align-self: flex-start; background: var(--color-paper-2); border-left: 2px solid var(--color-model); }
+  .msg.assistant.busy { color: var(--color-ink-2); font-style: italic; }
+  .msg.error { align-self: stretch; background: var(--color-paper-2); border-left: 2px solid var(--color-danger);
+    color: var(--color-danger); font-family: var(--font-mono); font-size: var(--text-sm); }
+  .msg.watch { align-self: stretch; background: var(--color-paper-2); border-left: 2px solid var(--color-action); }
+  .msg.watch .wt { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-action);
+    display: block; margin-bottom: 3px; }
+  /* One agent step — a compact line stating what the assistant is doing */
+  .msg.step { align-self: stretch; background: none; box-shadow: none; padding: 2px var(--space-xs);
+    font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2); }
+  .msg.step.err { color: var(--color-danger); }
+
+  /* Rendered Markdown */
+  .md { white-space: normal; }
+  .md > :first-child { margin-top: 0; }
+  .md > :last-child { margin-bottom: 0; }
+  .md p { margin: 0 0 var(--space-xs); }
+  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 10px 0 5px; font-size: var(--text-md); font-weight: 650; }
+  .md ul, .md ol { margin: var(--space-2xs) 0 var(--space-xs); padding-left: 20px; }
+  .md ul ul, .md ul ol, .md ol ul, .md ol ol { margin: 2px 0; }
+  .md li { margin: 2px 0; }
+  .md strong { font-weight: 650; color: var(--color-ink); }
+  .md em { font-style: italic; }
+  .md a { color: var(--color-model); }
+  .md code { font-family: var(--font-mono); font-size: var(--text-sm); background: var(--color-paper-3);
+    border: 1px solid var(--color-rule); padding: 0 4px; border-radius: 4px; }
+  .md pre { background: var(--color-paper-3); border: 1px solid var(--color-rule); border-radius: 6px;
+    padding: var(--space-xs) 10px; overflow-x: auto; margin: var(--space-2xs) 0; }
+  .md pre code { background: none; border: none; padding: 0; font-size: var(--text-sm); }
+
+  .actions { display: flex; gap: var(--space-2xs); margin-top: 7px; }
+  .actions button {
+    background: none; border: 1px solid var(--color-rule); color: var(--color-ink-2);
+    border-radius: 6px; padding: 2px var(--space-xs); font-size: var(--text-xs); cursor: pointer;
+    font-family: var(--font-mono);
+    transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+  }
+  .actions button:hover { color: var(--color-ink); border-color: var(--color-model); }
+  .actions button.done { color: var(--color-model); border-color: var(--color-model); }
+
+  /* "Insert into field ▾" — the field list.
+   * position: fixed rather than absolute: #msgs scrolls and used to clip the
+   * menu. Position and height are computed on open (placeInsertMenu). */
+  .insert-wrap { position: relative; display: inline-block; }
+  .insert-menu {
+    position: fixed; z-index: 50; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-card); box-shadow: var(--shadow-md); padding: var(--space-3xs);
+  }
+  .insert-menu button {
+    display: block; width: 100%; text-align: left; border: none; background: none;
+    font-family: var(--font-body); font-size: var(--text-sm); color: var(--color-ink);
+    padding: var(--space-2xs) var(--space-xs); border-radius: 6px;
+    line-height: 1.35; white-space: normal; word-break: break-word;
+  }
+  .insert-menu button:hover { background: var(--color-paper-3); color: var(--color-ink); }
+  /* Safety-critical fields (allergies, drugs, diagnoses, results) — marked here too */
+  .insert-menu button.is-critical { border-left: 2px solid var(--color-danger); border-radius: 0 6px 6px 0; }
+
+  /* Composer + context bar */
+  .composer-wrap { flex: 0 0 auto; border-top: 1px solid var(--color-rule); padding: var(--space-xs) var(--space-sm); }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-bottom: var(--space-xs); }
+  .chips:empty { display: none; }
+  .chips button {
+    background: var(--color-paper-2); border: 1px solid var(--color-rule); color: var(--color-ink);
+    border-radius: var(--radius-pill); padding: var(--space-2xs) 10px; font-size: var(--text-sm);
+    cursor: pointer; white-space: nowrap; box-shadow: var(--shadow-sm);
+    transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+  }
+  .chips button:hover { border-color: var(--color-model); color: var(--color-model); }
+
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm);
+    color: var(--color-ink-2); cursor: pointer; user-select: none; }
+  .switch input { width: auto; }
+  .switch:hover { color: var(--color-ink); }
+
+  .composer { display: flex; gap: var(--space-xs); align-items: flex-end; }
+  #input {
+    flex: 1; background: var(--color-paper-2); color: var(--color-ink);
+    border: 1px solid var(--color-rule); border-radius: var(--radius-input); padding: var(--space-xs) 9px;
+    font-family: var(--font-body); font-size: var(--text-md); outline: none; resize: none;
+    min-height: 40px; max-height: 148px; line-height: 1.45; box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-short) var(--ease-out);
+  }
+  #input:focus { border-color: var(--color-model); }
+  #send {
+    flex: 0 0 auto; background: var(--color-action); color: var(--color-action-ink); border: none;
+    border-radius: var(--radius-input); padding: 0 var(--space-md); height: 40px; font-weight: 650;
+    cursor: pointer; box-shadow: var(--shadow-sm); transition: background var(--dur-short) var(--ease-out);
+  }
+  #send:hover { background: var(--color-action-2); }
+  #send:active { transform: translateY(1px); }
+  #send:disabled { opacity: 0.5; cursor: default; }
+  #send.stop { background: var(--color-danger); color: var(--color-danger-ink); }
+  #mic {
+    flex: 0 0 auto; height: 40px; width: 40px; padding: 0; font-size: var(--text-lg);
+    background: var(--color-paper-2); color: var(--color-ink-2);
+    border: 1px solid var(--color-rule); border-radius: var(--radius-input);
+    cursor: pointer; box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-short) var(--ease-out);
+  }
+  #mic:hover:not(:disabled) { border-color: var(--color-model); }
+  #mic:disabled { opacity: 0.5; cursor: default; }
+  #doc {
+    flex: 0 0 auto; height: 40px; width: 40px; padding: 0; font-size: var(--text-lg);
+    background: var(--color-paper-2); color: var(--color-ink-2);
+    border: 1px solid var(--color-rule); border-radius: var(--radius-input);
+    cursor: pointer; box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-short) var(--ease-out);
+  }
+  #doc:hover:not(:disabled) { border-color: var(--color-model); }
+  #doc:disabled { opacity: 0.5; cursor: default; }
+
+  /* Dragging a file over the panel turns the whole window into a drop zone */
+  #drop {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center; text-align: center;
+    background: oklch(96.5% 0.006 320 / 0.92); color: var(--color-action);
+    border: 2px dashed var(--color-action); border-radius: var(--radius-card);
+    font-size: var(--text-lg); font-weight: 650; padding: var(--space-lg);
+  }
+  #drop.show { display: flex; }
+  /* While recording: a red border plus the microphone level as a background fill. */
+  #mic.rec {
+    border-color: var(--color-danger); color: var(--color-danger);
+    background:
+      linear-gradient(to top, oklch(50% 0.180 25 / 0.18) var(--level, 0%), transparent var(--level, 0%)),
+      var(--color-paper-2);
+  }
+  .histnote { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3);
+    white-space: nowrap; flex: 0 0 auto; }
+  .footline { margin-top: 6px; font-family: var(--font-mono); font-size: var(--text-2xs);
+    color: var(--color-ink-3); display: flex; justify-content: flex-end; min-height: 12px; }
+
+  /* ================= HISTORY VIEW ===================================== */
+  .hist-bar { padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--color-rule); flex: 0 0 auto; }
+  .hist-bar input { width: 100%; font-family: var(--font-body); font-size: var(--text-md); padding: var(--space-xs) 9px; }
+  #histList { flex: 1 1 auto; overflow-y: auto; padding: var(--space-xs) var(--space-sm); }
+  #histEmpty { color: var(--color-ink-2); font-size: var(--text-sm); text-align: center; padding: var(--space-xl) 0; }
+  .hist-item { display: flex; gap: 9px; padding: var(--space-xs); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-card); margin-bottom: var(--space-xs); cursor: pointer; background: var(--color-paper-2);
+    box-shadow: var(--shadow-sm); transition: border-color var(--dur-short) var(--ease-out); }
+  .hist-item:hover { border-color: var(--color-model); }
+  .hist-item img { width: 56px; height: 36px; object-fit: cover; border-radius: 5px; flex: 0 0 auto; }
+  .hist-body { flex: 1; min-width: 0; }
+  .hist-title { font-size: var(--text-sm); color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist-snippet { font-size: var(--text-sm); color: var(--color-ink-2); margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hist-meta { display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-2xs); }
+  .hist-time { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); }
+  .hist-del { background: none; border: none; color: var(--color-ink-3); cursor: pointer; font-size: var(--text-sm);
+    padding: 2px 5px; border-radius: 5px; }
+  .hist-del:hover { color: var(--color-danger); background: var(--color-paper-3); }
+  .hist-foot { display: flex; justify-content: space-between; align-items: center;
+    padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--color-rule); flex: 0 0 auto; }
+  #histCount { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2); }
+  #histClear { background: none; border: 1px solid var(--color-rule); color: var(--color-ink-2);
+    border-radius: 6px; padding: 3px 9px; font-size: var(--text-xs); cursor: pointer; font-family: var(--font-mono); }
+  #histClear:hover { color: var(--color-danger); border-color: var(--color-danger); }
+
+  /* ================= WATCH / SETTINGS VIEWS =========================== */
+  .pane { padding: var(--space-sm); overflow-y: auto; flex: 1 1 auto; }
+  .pane h2 { margin: 0 0 var(--space-2xs); font-size: var(--text-lg); font-weight: 650; }
+  .pane p.lead { margin: 0 0 var(--space-md); font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.5; }
+  .switch.block { margin: var(--space-sm) 2px 0; }
+  .primary-btn {
+    width: 100%; background: var(--color-action); color: var(--color-action-ink); border: none;
+    border-radius: var(--radius-input); padding: 9px; font-weight: 650; font-size: var(--text-md); cursor: pointer;
+    transition: background var(--dur-short) var(--ease-out);
+  }
+  .primary-btn { box-shadow: var(--shadow-sm); }
+  .primary-btn:hover { background: var(--color-action-2); }
+  .primary-btn.on { background: var(--color-danger); color: var(--color-danger-ink); }
+  .watch-status { margin-top: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-2xs);
+    color: var(--color-ink-2); min-height: 12px; }
+  .hint-line { margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-ink-3); line-height: 1.5; }
+
+  /* ================= FORM VIEW ======================================== */
+  .pane h3 { margin: var(--space-md) 0 var(--space-xs); font-family: var(--font-mono);
+    font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--color-ink-2); font-weight: 500; }
+  .status-row { display: flex; align-items: center; gap: var(--space-xs); padding: 3px 0;
+    font-size: var(--text-sm); color: var(--color-ink-2); }
+  .status-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--color-ink-3); }
+  .status-row .dot[data-state="ok"]   { background: oklch(55% 0.130 150); }
+  .status-row .dot[data-state="bad"]  { background: var(--color-danger); }
+  .status-row .dot[data-state="warn"] { background: oklch(65% 0.140 75); }
+  .ghost-wide { width: 100%; margin-top: var(--space-xs); background: none;
+    border: 1px solid var(--color-rule); color: var(--color-ink-2);
+    border-radius: var(--radius-input); padding: 7px; font-size: var(--text-sm); cursor: pointer;
+    transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out); }
+  .ghost-wide:hover:not(:disabled) { color: var(--color-ink); border-color: var(--color-rule-2); }
+  .ghost-wide:disabled { opacity: 0.5; cursor: default; }
+  .fields { list-style: none; margin: 0; padding: 0; }
+  .fields li { margin-bottom: var(--space-2xs); }
+  .fields .empty { color: var(--color-ink-3); font-size: var(--text-sm); padding: var(--space-2xs) 0; }
+  .field-btn { width: 100%; display: flex; justify-content: space-between; align-items: center;
+    gap: var(--space-xs); text-align: left; padding: var(--space-xs) 10px;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    border-radius: var(--radius-card); color: var(--color-ink); font-size: var(--text-md);
+    cursor: pointer; box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-short) var(--ease-out); }
+  .field-btn:hover:not(:disabled) { border-color: var(--color-model); }
+  .field-btn .hint { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); }
+  /* Fields with no prompt template: visible, but nothing is generated for them */
+  .field-btn:disabled { cursor: default; box-shadow: none; background: none; color: var(--color-ink-2); }
+  /* Safety-critical (allergies, drugs, diagnoses, results) */
+  .field-btn.is-critical { border-left: 2px solid var(--color-danger); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" id="dot" title="Scribe Agent"></span>
+    </div>
+    <nav class="views" role="tablist" aria-label="Views">
+      <button class="viewtab is-active" id="tabChat" data-view="chat" role="tab" aria-selected="true">Chat</button>
+      <button class="viewtab" id="tabHistory" data-view="history" role="tab" aria-selected="false">History</button>
+      <!-- Watch is hidden from the UI (the code is kept). To bring it back, remove `hidden`. -->
+      <button class="viewtab" id="tabWatch" data-view="watch" role="tab" aria-selected="false" hidden>Watch</button>
+      <button class="viewtab" id="tabForm" data-view="form" role="tab" aria-selected="false">Form</button>
+    </nav>
+    <button class="icontab" id="gear" data-view="settings" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <!-- ==================== CHAT ==================== -->
+  <section class="view is-active" data-view="chat">
+    <div class="chat-head">
+      <div id="thumbBar">
+        <img id="thumbImg" alt="current capture">
+        <div id="thumbNote"></div>
+      </div>
+      <span class="grow"></span>
+      <span class="histnote" id="histNote" hidden>history not saved</span>
+      <button class="ghost-btn" id="newBtn" title="Clear and start a new capture">＋ New</button>
+    </div>
+
+    <div class="banner" id="connBanner">
+      <span><b>Model server unavailable.</b> Check that it is running and reachable.</span>
+      <button id="connSetup">Retry</button>
+    </div>
+
+    <div id="msgs">
+      <div id="empty">
+        Type a question and hit <kbd>Enter</kbd>.<br>
+        The current tab is captured on your first message, then you can keep asking follow-ups about the same shot.
+      </div>
+    </div>
+
+    <footer class="composer-wrap">
+      <div id="chips" class="chips"></div>
+      <!-- The context is always complete: "whole page" + "page text". The
+           controls were removed from the UI — these two inputs stay hidden and
+           permanently on, so the rest of the logic (grabContext) works
+           unchanged. -->
+      <input type="checkbox" id="withText" checked hidden>
+      <input type="checkbox" id="wholeDoc" checked hidden>
+      <div class="composer">
+        <textarea id="input" placeholder="Ask about the current tab…" rows="1"></textarea>
+        <button id="doc" title="Upload a document (PDF, Word, Excel, PowerPoint or an image)"
+          aria-label="Upload a document">📄</button>
+        <input id="docFile" type="file" hidden
+          accept=".pdf,.docx,.xlsx,.pptx,application/pdf,image/*">
+        <button id="mic" title="Dictate a question" aria-label="Dictate a question">🎤</button>
+        <button id="send">Send</button>
+      </div>
+      <div class="footline">
+        <span id="meta"></span>
+      </div>
+    </footer>
+  </section>
+
+  <!-- ==================== HISTORY ==================== -->
+  <section class="view" data-view="history">
+    <div class="hist-bar">
+      <input id="histSearch" type="text" placeholder="Search history…" spellcheck="false">
+    </div>
+    <div id="histList"></div>
+    <div class="hist-foot">
+      <span id="histCount"></span>
+      <button id="histClear">Clear all</button>
+    </div>
+  </section>
+
+  <!-- ==================== WATCH ==================== -->
+  <section class="view" data-view="watch">
+    <div class="pane">
+      <h2>Watch mode</h2>
+      <p class="lead">Re-shoots the current window every few seconds and asks your model only when the screen changes — for builds, trainings, long jobs.</p>
+      <div class="row">
+        <div style="flex: 0 0 96px;">
+          <label class="field" for="watchEvery">Every (s)</label>
+          <input id="watchEvery" type="number" min="3" step="1" value="15">
+        </div>
+        <div>
+          <label class="field" for="watchPrompt">Watch for</label>
+          <input id="watchPrompt" type="text" placeholder="did the build finish or fail?" spellcheck="false">
+        </div>
+      </div>
+      <label class="switch block">
+        <input type="checkbox" id="watchOnlyDone">
+        <span>Notify only on likely completion / error</span>
+      </label>
+      <div style="margin-top: var(--space-md);">
+        <button id="watchToggle" class="primary-btn">Start watching this window</button>
+      </div>
+      <div id="watchStatus" class="watch-status"></div>
+      <p class="hint-line">Keep the watched tab visible (a separate window works best) — capture only sees the visible tab. Watch runs while this panel is open.</p>
+    </div>
+  </section>
+
+  <!-- ==================== FORM ==================== -->
+  <section class="view" data-view="form">
+    <div class="pane">
+      <h2>Form drafts</h2>
+      <p class="lead">Only <b>drafts</b> are generated. Every piece of text must be reviewed
+        and approved by the clinician. The form is never submitted automatically.</p>
+
+      <h3>Status</h3>
+      <div id="mfConn" class="status-row">
+        <span class="dot" data-state="unknown"></span>
+        <span class="status-text">Checking…</span>
+      </div>
+      <div id="mfAsr" class="status-row">
+        <span class="dot" data-state="unknown"></span>
+        <span class="status-text">Checking the transcription server…</span>
+      </div>
+      <div id="mfPage" class="status-row">
+        <span class="dot" data-state="unknown"></span>
+        <span class="status-text">Checking the page…</span>
+      </div>
+      <button id="mfTest" class="ghost-wide">Test connection</button>
+
+      <h3>Fields found</h3>
+      <ul id="mfFields" class="fields">
+        <li class="empty">Looking…</li>
+      </ul>
+      <button id="mfDictateAll" class="primary-btn" style="margin-top: var(--space-sm);" disabled>
+        🎤 Dictate the whole form
+      </button>
+    </div>
+  </section>
+
+  <!-- ==================== SETTINGS ==================== -->
+  <section class="view" data-view="settings" id="settings">
+    <div class="pane">
+      <h2>Settings</h2>
+      <p class="lead">Answers come from the configured model server. Nothing is stored on a server.</p>
+      <div class="row">
+        <div>
+          <label class="field" for="lang">Answer language</label>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="lt">Lithuanian</option>
+            <option value="de">German</option>
+            <option value="pl">Polish</option>
+          </select>
+        </div>
+        <div>
+          <label class="field" for="ocrPages">Scanned page limit</label>
+          <input id="ocrPages" type="number" min="1" max="50" step="1" value="20">
+        </div>
+      </div>
+      <p class="lead">
+        A scanned document is read page by page — each page is a separate request
+        to the model. The limit guards against accidentally opening a 200-page file.
+      </p>
+
+      <h3>Agent mode</h3>
+      <label class="switch block">
+        <input type="checkbox" id="agentMode" checked>
+        <span>Let the assistant use tools</span>
+      </label>
+      <p class="lead">
+        With this on, the assistant can read a linked document itself, inspect the
+        form fields and propose text for them (only the clinician actually writes
+        anything). With it off, it falls back to plain chat with no tools.
+      </p>
+
+      <h3>Host application forms</h3>
+      <label class="switch block">
+        <input type="checkbox" id="openFormsInTab" checked>
+        <span>Open forms in a tab rather than a separate window</span>
+      </label>
+      <p class="lead">
+        Host applications often open a document form in a separate popup window,
+        where this side panel does not work. With this on, the form opens as a tab
+        in the same window and the panel works immediately. The tab can still be
+        dragged out into its own window if needed — the panel works there too.
+      </p>
+
+      <!-- Metrics. The user must SEE this rather than discover it: telemetry
+           nobody was told about destroys trust in a tool irreversibly. -->
+      <h3>Usage metrics</h3>
+      <p class="lead">
+        Only <b>numbers</b> are collected: how many drafts were generated, how long
+        they took, what percentage of the text you edited, how many errors occurred.
+        <b>No patient text is collected</b> — not drafts, not transcripts, not
+        questions. The data stays on this machine until you export it.
+      </p>
+      <label class="switch block">
+        <input type="checkbox" id="metricsOn" checked>
+        <span>Collect usage metrics</span>
+      </label>
+      <div id="metricsCount" class="status-row">
+        <span class="status-text">—</span>
+      </div>
+      <div id="metricsSync" class="status-row">
+        <span class="dot" data-state="unknown"></span>
+        <span class="status-text">—</span>
+      </div>
+      <button id="metricsFlush" class="ghost-wide" hidden>Send now</button>
+      <button id="metricsExport" class="ghost-wide">Export metrics (JSON)</button>
+      <button id="metricsClear" class="ghost-wide">Delete collected metrics</button>
+    </div>
+  </section>
+
+  <div id="drop">Drop it — the document will be read</div>
+
+  <!-- Classic scripts (globalThis.SCRIBE_*) — the same ones the content script
+       uses. The module is loaded after them. -->
+  <script src="content/audio-capture.js"></script>
+  <script src="content/dictation.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Microphone permission</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* A one-off window: the side panel is a separate origin
+ * (chrome-extension://…) and Chrome DOES NOT SHOW the microphone permission
+ * prompt there — the request silently returns NotAllowedError. So permission is
+ * requested here, in a normal window, where the "Allow" bar is visible. Once
+ * granted it applies to the whole extension.
+ */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: var(--space-md);
+    background: var(--color-paper); color: var(--color-ink);
+    font-family: var(--font-body); font-size: var(--text-md);
+    display: flex; flex-direction: column; gap: var(--space-sm);
+  }
+  h1 { margin: 0; font-size: var(--text-lg); font-weight: 650; }
+  p { margin: 0; color: var(--color-ink-2); line-height: 1.5; }
+  button {
+    font-family: inherit; font-size: var(--text-md); font-weight: 650;
+    background: var(--color-action); color: var(--color-action-ink); border: none;
+    border-radius: var(--radius-input); padding: 10px; cursor: pointer;
+    box-shadow: var(--shadow-sm);
+  }
+  button:hover { background: var(--color-action-2); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { min-height: 18px; font-family: var(--font-mono); font-size: var(--text-2xs); }
+  #status.err { color: var(--color-danger); font-size: var(--text-sm); line-height: 1.45; }
+  #status.ok { color: var(--color-model); }
+</style>
+</head>
+<body>
+  <h1>Microphone permission</h1>
+  <p>Dictation in the side panel needs microphone permission for the extension
+    itself — separately from the permission you granted to the page you are
+    working in. You are asked once.</p>
+  <button id="allow">Allow microphone</button>
+  <div id="status"></div>
+  <script src="content/audio-capture.js"></script>
+  <script src="mic-permission.js"></script>
+</body>
+</html>

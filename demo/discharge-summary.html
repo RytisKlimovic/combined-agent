@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Demo EHR — inpatient discharge summary</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+
+<div class="warn">
+  <strong>Demo page.</strong> Every value here is fabricated. It exists only to
+  exercise the extension. Never test against real patient data.
+</div>
+
+<div class="nav">
+  Demo forms: <a href="visit-note.html">visit note</a> &middot;
+  <strong>discharge summary</strong>
+</div>
+
+<div class="card">
+  <h1>Patient header</h1>
+  <h2>Demo EHR &mdash; inpatient discharge summary</h2>
+  <div class="grid" style="margin-top:14px">
+    <div class="kv"><b>Date of birth</b><span class="patient-birth-date">1952-11-30</span></div>
+    <div class="kv"><b>Sex</b><span class="patient-sex">Female</span></div>
+    <div class="kv"><b>Admitted</b><span class="admission-date">2026-09-08 08:42</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Diagnoses</h2>
+  <!--
+    Unlike the visit note, this form stores diagnoses as a primary plus a list
+    of secondary ones — the same split a real EHR makes. field-map.js covers
+    both shapes with one comma-separated selector.
+  -->
+  <div class="grid">
+    <div class="kv"><b>Primary</b><span id="PrimaryDiagnosis_Name">J18.9 Pneumonia, unspecified organism</span></div>
+    <div class="kv"><b>Secondary</b><span id="SecondaryDiagnoses_0__Name">J44.9 Chronic obstructive pulmonary disease</span></div>
+    <div class="kv"><b>Secondary</b><span id="SecondaryDiagnoses_1__Name">I48.0 Paroxysmal atrial fibrillation</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Referral</h2>
+  <div class="kv"><b>Referral diagnosis</b><span id="ReferralDiagnosis_Name">Fever and productive cough for 4 days</span></div>
+</div>
+
+<div class="card">
+  <h2>Vital signs</h2>
+  <div class="vitals-panel grid">
+    <div class="kv"><b>BP</b>124/78 mmHg</div>
+    <div class="kv"><b>HR</b>88 bpm, irregular</div>
+    <div class="kv"><b>SpO&#8322;</b>96 % (room air)</div>
+    <div class="kv"><b>Temp.</b>37.1 &deg;C</div>
+    <div class="kv"><b>RR</b>18 /min</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Previous notes</h2>
+  <div class="history-notes">2026-09-08 Admitted via the emergency department: right lower lobe consolidation on chest radiograph, CRP 184 mg/l. Intravenous amoxicillin-clavulanate started.
+2026-09-11 Afebrile for 48 hours, CRP down to 41 mg/l, switched to oral therapy.</div>
+</div>
+
+<div class="card">
+  <h2>Discharge summary</h2>
+  <!--
+    NOTE the `id` on the objective status field: it carries a trailing
+    underscore because the control is wrapped for validation, while the visit
+    note has the plain id. The binding path in `name` is identical in both.
+    This is exactly why field-map.js prefers [name=] and keeps #id as a
+    fallback only.
+  -->
+  <form id="note-form"
+        onsubmit="event.preventDefault(); alert('A human submits the form — the extension never does that automatically.');">
+
+    <label for="Note_ComplaintsAndHistory">Complaints and history</label>
+    <textarea id="Note_ComplaintsAndHistory" name="Note.ComplaintsAndHistory"></textarea>
+
+    <label for="Note_HistoryOfIllness">History of present illness</label>
+    <textarea id="Note_HistoryOfIllness" name="Note.HistoryOfIllness"></textarea>
+
+    <label for="Note_ObjectiveStatus_">Objective status</label>
+    <div data-validation-border-for="Note_ObjectiveStatus">
+      <textarea id="Note_ObjectiveStatus_" name="Note.ObjectiveStatus"></textarea>
+    </div>
+
+    <label for="DiagnosisBlocks_0__Rationale">Diagnosis rationale</label>
+    <textarea id="DiagnosisBlocks_0__Rationale" name="DiagnosisBlocks[0].Rationale"></textarea>
+
+    <label for="DiagnosisBlocks_0__DecisionContext">Clinical decision context</label>
+    <textarea id="DiagnosisBlocks_0__DecisionContext" name="DiagnosisBlocks[0].DecisionContext"></textarea>
+
+    <label for="TreatmentGiven">Non-pharmacological treatment given</label>
+    <textarea id="TreatmentGiven" name="TreatmentGiven"></textarea>
+
+    <label for="StatusAtDischarge">Patient status at discharge</label>
+    <textarea id="StatusAtDischarge" name="StatusAtDischarge"></textarea>
+
+    <label for="FollowUpRecommendations">Treatment / nursing / follow-up recommendations</label>
+    <textarea id="FollowUpRecommendations" name="FollowUpRecommendations"></textarea>
+
+    <!-- Context-only fields: read for the prompt, never drafted into. -->
+    <label for="LabResults">Laboratory results performed</label>
+    <textarea id="LabResults" name="LabResults"></textarea>
+
+    <label for="SurgicalProcedures_0__Description">Surgical procedures — description</label>
+    <textarea id="SurgicalProcedures_0__Description" name="SurgicalProcedures[0].Description"></textarea>
+
+    <!-- Safety-critical: excluded from FIELD_MAP, flagged by form-scan.js. -->
+    <div class="critical">
+      <label for="NewlyIdentifiedAllergies_0__Description">Newly identified allergies — description</label>
+      <textarea id="NewlyIdentifiedAllergies_0__Description" name="NewlyIdentifiedAllergies[0].Description"></textarea>
+    </div>
+
+    <div class="critical">
+      <label for="MedicationTreatment">Medication treatment</label>
+      <textarea id="MedicationTreatment" name="MedicationTreatment"></textarea>
+    </div>
+
+    <!-- Administrative field — skipped entirely by form-scan.js -->
+    <label for="RevisionReason">Revision reason</label>
+    <textarea id="RevisionReason" name="RevisionReason"></textarea>
+
+    <div style="margin-top:18px">
+      <button type="submit" class="submit">Submit (human only)</button>
+    </div>
+  </form>
+</div>
+
+</body>
+</html>
