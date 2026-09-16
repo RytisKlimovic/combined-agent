@@ -12,7 +12,9 @@ const EXT = fileURLToPath(new URL('..', import.meta.url));
 const { isScanned, joinPages, buildOcrRequest, ocrPages, OCR_PROMPT, UNREADABLE } = await import(
   pathToFileURL(`${EXT}/lib/ocr.js`).href
 );
-const { ENDPOINTS } = await import(pathToFileURL(`${EXT}/lib/settings.js`).href);
+
+/** The configured model server, as the panel passes it in. */
+const LLM = { endpoint: 'http://localhost:8000', model: 'test-model', apikey: 'k-123' };
 
 let pass = 0,
   fail = 0;
@@ -54,14 +56,27 @@ check('requires unreadable spots to be marked', OCR_PROMPT.includes(UNREADABLE))
 
 console.log('--- The request shape ---');
 {
-  const req = buildOcrRequest('data:image/jpeg;base64,AAAA');
+  const req = buildOcrRequest('data:image/jpeg;base64,AAAA', LLM);
   check('it targets the configured model server',
-    req.url === `${ENDPOINTS.llm}/v1/chat/completions`, req.url);
+    req.url === 'http://localhost:8000/v1/chat/completions', req.url);
+  check('it uses the configured model', req.body.model === 'test-model', req.body.model);
+  check('the API key is sent', req.headers.Authorization === 'Bearer k-123',
+    JSON.stringify(req.headers));
   check('no streaming', req.body.stream === false);
   check('there is no system message', !req.body.messages.some((m) => m.role === 'system'));
   const parts = req.body.messages[0].content;
   check('the image is attached', Array.isArray(parts) && parts.some((p) => p.type === 'image_url'),
     JSON.stringify(parts).slice(0, 120));
+
+  // A provider whose API root is not a plain server root must still work.
+  const gemini = buildOcrRequest('x', {
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    model: 'gemini-2.0-flash',
+  });
+  check('a full chat-completions endpoint is used verbatim',
+    gemini.url === 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    gemini.url);
+  check('no Authorization header without a key', gemini.headers.Authorization === undefined);
 }
 
 console.log('--- ocrPages: the happy path ---');
@@ -78,6 +93,7 @@ console.log('--- ocrPages: the happy path ---');
     },
     onProgress: (done, total) => progress.push(`${done}/${total}`),
     concurrency: 2,
+    llm: LLM,
   });
 
   check('every page was transcribed', res.pages === 4, String(res.pages));
@@ -106,6 +122,7 @@ console.log('--- ocrPages: cancellation ---');
     },
     signal: controller.signal,
     concurrency: 1,
+    llm: LLM,
   });
 
   check('it is reported as cancelled', res.aborted === true);
@@ -125,6 +142,7 @@ console.log('--- ocrPages: a failure on one page ---');
       return `text ${url}`;
     },
     concurrency: 1,
+    llm: LLM,
   });
 
   check('the document is not aborted', res.aborted === false && res.pages === 3, String(res.pages));

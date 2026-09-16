@@ -462,11 +462,17 @@ async function runGeneration({ fieldKey, context }, signal, onDelta) {
 
 function humanError(err) {
   const msg = err?.message || String(err);
+  // The endpoint is user-configurable, so every one of these points at the
+  // setting that would actually fix it.
   if (/Failed to fetch/i.test(msg)) {
-    return "Could not reach the model server. Check that it is running and that you are on the right network.";
+    return "Could not reach the model server. Check the endpoint in Settings, and that the server is running.";
   }
-  if (/401|403/.test(msg)) return "The model server rejected the request (authentication).";
-  if (/404/.test(msg)) return "Model endpoint not found (404). Check the model name.";
+  if (/401|403/.test(msg)) {
+    return "The model server rejected the request. Check the API key in Settings.";
+  }
+  if (/404/.test(msg)) {
+    return "Not found (404). Check the endpoint and the model name in Settings — the endpoint may need the full /chat/completions path.";
+  }
   return msg;
 }
 

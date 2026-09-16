@@ -6,6 +6,49 @@
 
 const clip = (s, n) => (s && s.length > n ? s.slice(0, n) + "\n…[truncated]" : s || "");
 
+// ---- endpoint URLs --------------------------------------------------------
+//
+// The endpoint is user-configurable, and "OpenAI-compatible" providers do not
+// agree on where the API root sits. Blindly appending `/v1/chat/completions`
+// works for some and breaks others:
+//
+//   http://localhost:8000                            -> +/v1/chat/completions
+//   https://api.groq.com/openai                      -> +/v1/chat/completions
+//   https://api.mistral.ai/v1                        -> +/chat/completions
+//   https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+//                                                    -> already complete
+//
+// So the rule is: whatever the user pasted is respected. A URL that already
+// names the operation is used as-is, a URL that already ends in an API version
+// segment only gets the operation appended, and anything else is treated as a
+// server root.
+
+const strip = (u) => String(u || "").trim().replace(/\/+$/, "");
+
+/** `/v1`, `/v1beta`, `/v2alpha`… — an API version segment, not a server root. */
+const VERSION_TAIL = /\/v\d+[a-z0-9]*$/i;
+
+/** @returns {string} the chat-completions URL for a user-supplied endpoint */
+export function chatCompletionsUrl(endpoint) {
+  const base = strip(endpoint);
+  if (!base) return "";
+  if (/\/chat\/completions$/.test(base)) return base;
+  if (VERSION_TAIL.test(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+/**
+ * The model-listing URL, derived from the same endpoint.
+ *
+ * Only used for the reachability check — several providers do not implement it,
+ * which is why a non-OK response there must not block sending (see
+ * `ensureModel` in sidepanel.js).
+ */
+export function modelsUrl(endpoint) {
+  const url = chatCompletionsUrl(endpoint);
+  return url ? url.replace(/\/chat\/completions$/, "/models") : "";
+}
+
 // Steers the model toward short, on-point answers. The single biggest lever
 // against rambling, whole-screen descriptions.
 export const DEFAULT_SYSTEM =
@@ -135,10 +178,11 @@ export function buildRequest({
     };
   }
 
-  // OpenAI-compatible (vLLM, llama.cpp server, LM Studio, etc.)
+  // OpenAI-compatible (vLLM, llama.cpp server, LM Studio, Groq, Gemini's
+  // compatibility layer, OpenRouter, Mistral, …)
   if (apikey) headers["Authorization"] = `Bearer ${apikey}`;
   return {
-    url: `${base}/v1/chat/completions`,
+    url: chatCompletionsUrl(base),
     headers,
     body: { model, messages: apiMessages, stream },
     pick: (d) => d?.choices?.[0]?.message?.content,

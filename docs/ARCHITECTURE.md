@@ -49,7 +49,7 @@ This is the constraint everything else bends around.
 | --- | --- |
 | The review overlay in the page | Yes — briefly. Cleared on close. |
 | Prompts in flight to the model | Yes. Not logged (`DEBUG` ships `false`). |
-| `chrome.storage` | Never. Only settings and an install pseudonym. |
+| `chrome.storage` | Never. Settings, an API key, and an install pseudonym. |
 | Conversation history (IndexedDB) | Yes, but **never** for clinical pages. |
 | `storage.session` restore | Same rule as history. |
 | The metrics database | Structurally impossible. See below. |
@@ -66,6 +66,49 @@ in it at all. `sanitize()` iterates the **schema**, not the payload, so an
 unknown key cannot get through even in principle. `fieldKey` is not a string but
 a `Set` built from `Object.keys(FIELD_MAP)` — code identifiers, not data. The
 test hands it a whole realistic context object and asserts none of it survives.
+
+## The configurable endpoint
+
+The model server, the model name, the API key and the ASR endpoint are set in
+the side panel and stored in `chrome.storage.local`. Everything else in
+`DEFAULTS` stays fixed. That split is the interesting part:
+
+```js
+export const CONFIGURABLE = Object.freeze(['vllmEndpoint', 'model', 'apiKey', 'asrEndpoint']);
+```
+
+`getSettings()` reads only those keys on top of `DEFAULTS`, so a stray storage
+entry cannot disable streaming, raise the token budget or — the one that
+matters — replace `systemPromptOverride`. The safety guards in
+`lib/prompt-templates.js` are only guards while the system prompt is not a
+user-editable string, and a test asserts it is not on the list.
+
+Two consequences ripple outwards from making the endpoint a variable:
+
+**URL joining stopped being string concatenation.** `${base}/v1/chat/completions`
+is right for vLLM and wrong for at least three providers people will actually
+use: Mistral and Groq hand out a root that already ends in `/v1`, and Google's
+OpenAI compatibility layer sits at `/v1beta/openai/` with no `/v1` segment at
+all. `chatCompletionsUrl()` in [`llm.js`](../llm.js) therefore respects what was
+pasted — a URL naming the operation is used verbatim, a URL ending in a version
+segment gets only the operation appended, anything else is a server root.
+[`tests/endpoint-url.test.mjs`](../tests/endpoint-url.test.mjs) pins every shape.
+
+**A failed pre-flight stopped meaning "server down".** The panel used to require
+`/models` to return 200 before it would send anything. Several providers do not
+implement `/models`, so that check would have rejected working servers. Now only
+a transport failure or an explicit 401/403 blocks sending — everything else is
+treated as "the server answered", and the real request surfaces its own error,
+which carries far better detail than a pre-flight ever could. `testConnection()`
+returns `reachable` and `ok` as separate answers for exactly this reason.
+
+There is also a plain honesty problem that code cannot solve. The original
+deployment ran the model inside the hospital network; that was the point.
+Pointing the extension at a hosted provider sends page content — patient data,
+in a clinical deployment — to a third party. `isLocalEndpoint()` drives a
+warning in the Settings pane whenever the endpoint is not loopback. It warns
+rather than blocks: a deliberate choice belongs to the user, an accidental one
+does not.
 
 ## The one file that knows about the EHR
 

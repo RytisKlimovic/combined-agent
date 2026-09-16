@@ -8,6 +8,7 @@ import {
   FIELDS_LABEL,
   LANGUAGES,
   languageName,
+  modelsUrl,
 } from "./llm.js";
 import { grabPageContext, grabFullDocument, getActiveTab } from "./context.js";
 import { grabPdfText, loadPdf, extractText, renderPage } from "./pdftext.js";
@@ -17,7 +18,15 @@ import { googleExportUrl, sharepointDownloadUrl, fetchDocument } from "./lib/clo
 import { pickPresets, deriveSignals } from "./presets.js";
 import { addEntry, getRecent, search as searchHistory, deleteEntry, clearAll } from "./db.js";
 import { renderMarkdown, stripMarkdown } from "./md.js";
-import { ENDPOINTS, isClinicalUrl } from "./lib/settings.js";
+import {
+  DEFAULTS,
+  ENDPOINTS,
+  isClinicalUrl,
+  isLocalEndpoint,
+  getSettings,
+  saveSettings as persistSettings,
+  resetSettings,
+} from "./lib/settings.js";
 import { runAgent } from "./lib/agent.js";
 
 // Loaded as classic scripts in sidepanel.html (same files the content script uses).
@@ -52,12 +61,21 @@ const els = {
   histCount: $("histCount"),
   tabWatch: $("tabWatch"),
   connBanner: $("connBanner"),
+  connReason: $("connReason"),
   connSetup: $("connSetup"),
   mic: $("mic"),
   doc: $("doc"),
   docFile: $("docFile"),
   drop: $("drop"),
   ocrPagesLimit: $("ocrPages"),
+  llmEndpoint: $("llmEndpoint"),
+  llmModel: $("llmModel"),
+  llmKey: $("llmKey"),
+  asrEndpoint: $("asrEndpoint"),
+  backendTest: $("backendTest"),
+  backendReset: $("backendReset"),
+  backendStatus: $("backendStatus"),
+  backendWarn: $("backendWarn"),
   openFormsInTab: $("openFormsInTab"),
   agentMode: $("agentMode"),
   histNote: $("histNote"),
@@ -95,22 +113,50 @@ function chatErrorKind(err) {
   return "other";
 }
 
-// Fixed backend — users don't configure any of this (see lib/settings.js, which
-// the form-drafting half reads from too).
-const FIXED_BASE = ENDPOINTS.llm;
-const FIXED_MODEL = ENDPOINTS.model;
-const FIXED_FORMAT = "openai";
-const FIXED_APIKEY = "";
+// The model server, configured in Settings and stored in chrome.storage.local
+// (see lib/settings.js). Mirrored here so the many buildRequest call sites stay
+// synchronous; `loadBackend()` is the only writer.
+const backend = {
+  format: "openai",
+  base: DEFAULTS.vllmEndpoint,
+  model: DEFAULTS.model,
+  apikey: DEFAULTS.apiKey,
+};
 
-// Reachability check against the OpenAI-compatible /v1/models endpoint. Cached
-// after the first success so normal sends cost one request, not two.
+/** The three values ocr.js and the agent need, in the shape they expect. */
+const llmConfig = () => ({ endpoint: backend.base, model: backend.model, apikey: backend.apikey });
+
+async function loadBackend() {
+  const s = await getSettings();
+  backend.base = s.vllmEndpoint;
+  backend.model = s.model;
+  backend.apikey = s.apiKey;
+  serverReachable = false; // a new server has to prove itself
+  return s;
+}
+
+/**
+ * Reachability check against the OpenAI-compatible `/models` endpoint. Cached
+ * after the first success so normal sends cost one request, not two.
+ *
+ * Several providers do not implement `/models`, so only a transport failure or
+ * an explicit 401/403 counts as "cannot use this server". Any other status
+ * means the server answered, and the real send will surface its own error with
+ * far better detail than a pre-flight ever could.
+ */
 let serverReachable = false;
 async function ensureModel() {
-  if (serverReachable) return FIXED_MODEL;
-  const res = await fetch(`${FIXED_BASE}/v1/models`);
-  if (!res.ok) throw new Error(`Model server returned HTTP ${res.status}`);
+  if (serverReachable) return backend.model;
+  if (!backend.base) throw new Error("No model endpoint configured.");
+
+  const res = await fetch(modelsUrl(backend.base), {
+    headers: backend.apikey ? { Authorization: `Bearer ${backend.apikey}` } : {},
+  });
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`The model server rejected the API key (HTTP ${res.status}).`);
+  }
   serverReachable = true;
-  return FIXED_MODEL;
+  return backend.model;
 }
 
 // Current capture + running conversation. `convo` holds neutral turns
@@ -165,13 +211,16 @@ viewTabs.forEach((t) => t.addEventListener("click", () => activateView(t.dataset
 
 // ---- connection + context state -------------------------------------------
 
-// The banner shows only when the shared model server can't be reached.
+// The banner shows only when the configured model server can't be reached. It
+// carries the reason, because with a user-supplied endpoint "unavailable" could
+// mean a typo, a stopped server or a rejected key — three different fixes.
 async function checkConnection() {
   try {
     await ensureModel();
     els.connBanner.classList.remove("show");
     return true;
-  } catch (_) {
+  } catch (err) {
+    els.connReason.textContent = err?.message || "Check the endpoint in Settings ⚙.";
     els.connBanner.classList.add("show");
     return false;
   }
@@ -179,11 +228,17 @@ async function checkConnection() {
 
 els.connSetup.addEventListener("click", () => checkConnection());
 
-// ---- settings (language only; backend is fixed) ---------------------------
+// ---- settings -------------------------------------------------------------
 //
 // The context is always complete: "whole page" + "page text". Those two hidden
 // inputs stay permanently on (the controls were removed from the UI) and the
 // rest of the logic reads them unchanged.
+//
+// Two groups of settings, stored in the same place but read differently. The
+// UI-only ones (language, page limit, toggles) are read straight from
+// chrome.storage here. The model-server ones go through lib/settings.js,
+// because the service worker reads those too and there must be exactly one
+// definition of what "configured" means.
 
 function applySettings(s) {
   state.lang = LANGUAGES[s.lang] ? s.lang : "en";
@@ -209,6 +264,107 @@ function saveSettings() {
   });
 }
 
+// ---- the model server -----------------------------------------------------
+
+const hostOf = (url) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return String(url || "—");
+  }
+};
+
+function setBackendStatus(text, kind = "unknown") {
+  els.backendStatus.querySelector(".dot").dataset.state = kind;
+  els.backendStatus.querySelector(".status-text").textContent = text;
+}
+
+/**
+ * A cloud endpoint means page content — which in a clinical deployment is
+ * patient data — leaves this machine. Shown, not blocked: the choice is the
+ * user's, but it must be a choice rather than an accident.
+ */
+function refreshBackendWarning() {
+  const url = els.llmEndpoint.value.trim() || DEFAULTS.vllmEndpoint;
+  els.backendWarn.hidden = isLocalEndpoint(url);
+}
+
+/** Fills the form from storage and points `backend` at the same values. */
+async function loadBackendSettings() {
+  const s = await loadBackend();
+  els.llmEndpoint.value = s.vllmEndpoint;
+  els.llmModel.value = s.model;
+  els.llmKey.value = s.apiKey;
+  els.asrEndpoint.value = s.asrEndpoint;
+  refreshBackendWarning();
+  setBackendStatus("Not tested yet.");
+}
+
+/** Persists the form, re-points `backend`, and re-runs the connection check. */
+async function saveBackendSettings() {
+  await persistSettings({
+    vllmEndpoint: els.llmEndpoint.value,
+    model: els.llmModel.value,
+    apiKey: els.llmKey.value,
+    asrEndpoint: els.asrEndpoint.value,
+  });
+  await loadBackend();
+  refreshBackendWarning();
+  // A new server invalidates the cached capture-time answer, and the banner
+  // must not keep complaining about the previous one.
+  checkConnection();
+}
+
+async function testBackend() {
+  els.backendTest.disabled = true;
+  setBackendStatus("Testing…", "unknown");
+  await saveBackendSettings();
+
+  const res = await chrome.runtime.sendMessage({ type: "TEST_CONNECTION" }).catch(() => null);
+  els.backendTest.disabled = false;
+
+  if (!res) return setBackendStatus("The extension did not answer. Try reloading it.", "bad");
+
+  if (res.ok) {
+    const models = res.models ?? [];
+    const named = models.includes(backend.model);
+    // A server that lists its models AND does not list this one is the single
+    // most common misconfiguration, and the error it would otherwise produce
+    // (a 404 from deep inside a stream) says nothing useful.
+    if (models.length && !named) {
+      return setBackendStatus(
+        `Connected to ${hostOf(backend.base)}, but "${backend.model}" is not in its model list. ` +
+          `Available: ${models.slice(0, 6).join(", ")}${models.length > 6 ? "…" : ""}`,
+        "warn"
+      );
+    }
+    const note = models.length
+      ? `${models.length} model(s) available`
+      : res.error || "the server does not list models";
+    return setBackendStatus(`Connected to ${hostOf(backend.base)} · ${note}`, "ok");
+  }
+
+  setBackendStatus(res.error || "Could not reach the model server.", "bad");
+}
+
+els.backendTest.addEventListener("click", testBackend);
+
+// `change` rather than `input`: saving on every keystroke would re-point the
+// backend at half-typed URLs.
+for (const el of [els.llmEndpoint, els.llmModel, els.llmKey, els.asrEndpoint]) {
+  el.addEventListener("change", () => {
+    saveBackendSettings();
+    setBackendStatus("Changed — press Test connection.", "unknown");
+  });
+}
+els.llmEndpoint.addEventListener("input", refreshBackendWarning);
+
+els.backendReset.addEventListener("click", async () => {
+  await resetSettings();
+  await loadBackendSettings();
+  checkConnection();
+});
+
 els.ocrPagesLimit.addEventListener("change", saveSettings);
 els.openFormsInTab.addEventListener("change", saveSettings);
 els.agentMode.addEventListener("change", () => {
@@ -217,7 +373,7 @@ els.agentMode.addEventListener("change", () => {
 });
 
 els.lang.addEventListener("change", () => {
-  state.lang = els.lang.value === "en" ? "en" : "lt";
+  state.lang = LANGUAGES[els.lang.value] ? els.lang.value : "en";
   saveSettings();
   refreshChipsForActiveTab();
 });
@@ -321,9 +477,9 @@ async function readCloudBytes({ buffer, name, type = "", kind }) {
     if (!pdf) throw new Error("Could not open the PDF file.");
     try {
       const layer = await extractText(pdf, { maxChars: 100000 });
-      if (!isScanned(layer)) return { text: layer.text, kind: "pdf", note: `${layer.pages} psl.` };
+      if (!isScanned(layer)) return { text: layer.text, kind: "pdf", note: `${layer.pages} pages` };
       const scan = await readScannedPdf(pdf, { source: "tab" });
-      return { text: scan.text, kind: "pdf", note: `${scan.pages} psl.` };
+      return { text: scan.text, kind: "pdf", note: `${scan.pages} pages` };
     } finally {
       pdf.destroy?.();
     }
@@ -605,10 +761,10 @@ const EXTRACT_PROMPT =
 
 async function extractForField(answer, label) {
   const req = buildRequest({
-    format: FIXED_FORMAT,
-    base: FIXED_BASE,
-    model: FIXED_MODEL,
-    apikey: FIXED_APIKEY,
+    format: backend.format,
+    base: backend.base,
+    model: backend.model,
+    apikey: backend.apikey,
     // No system prompt: it would pin a reply language and a screen-assistant
     // persona, and this call must return the source text untouched.
     system: "",
@@ -797,7 +953,7 @@ async function readScannedPdf(pdf, { source }) {
   const progress = progressBubble();
   const startedAt = performance.now();
 
-  progress.say(`Nuskaitomas dokumentas · 0/${count} psl…`);
+  progress.say(`Reading the document · 0/${count} pages…`);
 
   let thumb = "";
   let result;
@@ -809,9 +965,10 @@ async function readScannedPdf(pdf, { source }) {
         if (i === 0) thumb = image; // first page doubles as the conversation's thumbnail
         return image;
       },
-      onProgress: (done) => progress.say(`Nuskaitomas dokumentas · ${done}/${count} psl…`),
+      onProgress: (done) => progress.say(`Reading the document · ${done}/${count} pages…`),
       signal: state.abort?.signal,
       concurrency: 2,
+      llm: llmConfig(),
     });
   } finally {
     progress.remove(); // never leave a dangling "reading…" bubble behind
@@ -927,6 +1084,7 @@ async function attachBytes({ name, type = "", buffer, source }) {
       count: 1,
       getImage: async () => image,
       signal: state.abort?.signal,
+      llm: llmConfig(),
     });
     text = scan.text;
     note = `scanned image · ${text.length.toLocaleString()} chars${scan.aborted ? " · cancelled" : ""}`;
@@ -1233,10 +1391,10 @@ const AGENT_PERSONA =
 // out (the loop decides whether they are shown — only the final answer is).
 async function agentCallModel({ messages, system, signal, onToken }) {
   const req = buildRequest({
-    format: FIXED_FORMAT,
-    base: FIXED_BASE,
-    model: FIXED_MODEL,
-    apikey: FIXED_APIKEY,
+    format: backend.format,
+    base: backend.base,
+    model: backend.model,
+    apikey: backend.apikey,
     messages,
     stream: true,
     system,
@@ -1348,9 +1506,11 @@ async function send() {
   let model;
   try {
     model = await ensureModel();
-  } catch (_) {
+  } catch (err) {
     checkConnection();
-    addBubble("error", "Can't reach the model server.");
+    // The specific message matters now that the endpoint is user-configurable:
+    // "rejected the API key" and "cannot be reached" need different fixes.
+    addBubble("error", err?.message || "Can't reach the model server.");
     return;
   }
 
@@ -1480,10 +1640,10 @@ async function send() {
       assistantEl = addBubble("assistant", "…");
       assistantEl.classList.add("busy");
       const req = buildRequest({
-        format: FIXED_FORMAT,
-        base: FIXED_BASE,
+        format: backend.format,
+        base: backend.base,
         model,
-        apikey: FIXED_APIKEY,
+        apikey: backend.apikey,
         messages: state.convo,
         stream: true,
         lang: state.lang,
@@ -1500,7 +1660,7 @@ async function send() {
       saveSession();
     }
     // Metrika: kuris patarimas panaudotas ir kiek uztruko. Nei klausimo, nei
-    // atsakymo teksto cia nera — tik preseto id ir ilgiai.
+    // no answer text here — only the preset id and some lengths.
     sendMetric("chat.asked", {
       preset: preset?.id ?? "custom",
       scope: els.wholeDoc.checked ? "whole" : "viewport",
@@ -2016,10 +2176,10 @@ async function onWatchChange(dataUrl) {
     watch.prompt ||
     "You are watching a long-running process on screen. In one short sentence, state its current status and whether it has finished, failed, or is still running.";
   const req = buildRequest({
-    format: FIXED_FORMAT,
-    base: FIXED_BASE,
+    format: backend.format,
+    base: backend.base,
     model,
-    apikey: FIXED_APIKEY,
+    apikey: backend.apikey,
     messages: [{ role: "user", text: promptText, image: dataUrl }],
     stream: false,
     lang: state.lang,
@@ -2154,10 +2314,10 @@ async function testMedConnection() {
   ]);
   els.mfTest.disabled = false;
 
-  if (llm?.ok) setMfStatus(els.mfConn, "ok", `Model · ${new URL(ENDPOINTS.llm).host}`);
+  if (llm?.ok) setMfStatus(els.mfConn, "ok", `Model · ${hostOf(backend.base)}`);
   else setMfStatus(els.mfConn, "bad", llm?.error || "Model server unreachable");
 
-  if (asr?.ok) setMfStatus(els.mfAsr, "ok", `Transcription · ${new URL(ENDPOINTS.asr).host}`);
+  if (asr?.ok) setMfStatus(els.mfAsr, "ok", `Transcription · ${hostOf(els.asrEndpoint.value || ENDPOINTS.asr)}`);
   else setMfStatus(els.mfAsr, "bad", asr?.error || "Transcription server unreachable");
 }
 
@@ -2450,5 +2610,7 @@ loadWatchSettings();
 restoreSession(); // bring back the conversation the panel had when it closed
 loadMedFields(); // chat needs the field list too, not just the Form view
 refreshChipsForActiveTab();
-checkConnection(); // detect the model / surface the banner if the server is down
+// The backend has to be loaded BEFORE the connection check, or the check would
+// run against the defaults and the banner would lie on first open.
+loadBackendSettings().then(checkConnection);
 els.input.focus();

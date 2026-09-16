@@ -1,9 +1,10 @@
 # Scribe Agent
 
-A Chrome MV3 extension that puts a local, self-hosted LLM next to whatever is on
+A Chrome MV3 extension that puts an LLM of your choosing next to whatever is on
 screen: it captures the current tab, reads documents the browser cannot read
 itself, and drafts clinical form text that a human then reviews before anything
-is written.
+is written. Any OpenAI-compatible endpoint works — a local server by default, or
+a hosted provider, configured in the side panel.
 
 It was built as an internal tool for clinical documentation. This repository is
 a generalised version: the institution, the host EHR, the internal hostnames and
@@ -62,21 +63,53 @@ To load the extension:
 
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → pick this
    directory.
-2. Start any OpenAI-compatible server on `http://localhost:8000` (vLLM,
-   llama.cpp's server, Ollama, LM Studio…). A vision-capable model is needed for
-   screenshots and scanned PDFs.
+2. Click the toolbar icon (or `Ctrl+Shift+L`) to open the side panel, then open
+   **Settings ⚙** and point **Model server** at an endpoint (see below). Press
+   **Test connection**.
 3. Open `demo/visit-note.html` or `demo/discharge-summary.html` from disk, or
    serve them on localhost. Every value in them is fabricated.
-4. Click the toolbar icon (or `Ctrl+Shift+L`) to open the side panel. The
-   **Form** tab lists the fields it found; each mapped field also grows an
+4. The **Form** tab lists the fields it found; each mapped field also grows an
    "AI draft" button in the page itself.
 
-Dictation additionally needs a speech-to-text server on `http://localhost:8001`
-speaking the contract documented at the top of [`lib/asr-client.js`](lib/asr-client.js).
-Without it, everything except dictation still works.
+### Choosing an endpoint
 
-All three addresses, and the model name, live in one frozen object in
-[`lib/settings.js`](lib/settings.js). Nothing else in the codebase hard-codes a
+Paste either the server root — `/v1/chat/completions` is appended — or the full
+chat-completions URL when a provider puts it somewhere else. Both are handled by
+`chatCompletionsUrl()` in [llm.js](llm.js), which is why providers that disagree
+about their API root all work.
+
+| Endpoint to paste | What it is |
+| --- | --- |
+| `http://localhost:8000` | vLLM, or llama.cpp's `llama-server` |
+| `http://localhost:11434/v1` | Ollama |
+| `http://localhost:1234/v1` | LM Studio |
+| `https://api.groq.com/openai/v1` | Groq |
+| `https://openrouter.ai/api/v1` | OpenRouter (it has `:free` model variants) |
+| `https://api.mistral.ai/v1` | Mistral |
+| `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | Google AI Studio — note it has no `/v1` segment, hence the full path |
+
+The hosted ones all have a free tier at the time of writing, but the tiers, the
+limits and the model names change often — check the provider. Set **Model** to
+the name that provider uses, and paste its key into **API key**; a local server
+needs no key.
+
+**Vision matters.** Screenshots and scanned PDFs need a multimodal model. The
+form-drafting half — field drafts, dictation routing, document text — works with
+a text-only model, so a text-only free tier is still worth trying.
+
+**A hosted endpoint means the page content leaves your machine**, which is the
+opposite of what the original deployment needed. The Settings pane says so
+whenever the endpoint is not `localhost`; see
+[isLocalEndpoint](lib/settings.js). Fine for the demo forms, which are
+fabricated. Not fine for real patient data.
+
+Dictation additionally needs a speech-to-text server (default
+`http://localhost:8001`, also configurable) speaking the contract documented at
+the top of [`lib/asr-client.js`](lib/asr-client.js). Without it, everything
+except dictation still works.
+
+Defaults live in one place, [`lib/settings.js`](lib/settings.js); the overrides
+live in `chrome.storage.local`. Nothing else in the codebase hard-codes a
 host.
 
 ---
@@ -102,7 +135,7 @@ content/
   open-in-tab*.js      make host popups open as tabs, so the side panel works
 
 lib/
-  settings.js          endpoints, the model, and which URLs count as clinical
+  settings.js          endpoint defaults + stored overrides, clinical-URL test
   prompt-templates.js  one prompt per field + the routing prompt + the guards
   vllm-client.js       OpenAI-compatible client (streaming and not)
   asr-client.js        the speech-to-text WebSocket client
@@ -115,7 +148,7 @@ lib/
   metrics-store.js     the metrics buffer (a SEPARATE IndexedDB database)
 
 demo/                  two synthetic EHR forms; every value is fabricated
-tests/                 20 suites, run with `npm test`
+tests/                 21 suites, run with `npm test`
 ```
 
 Two rules shape the layout:
@@ -286,7 +319,7 @@ are the interesting ones.
 npm test
 ```
 
-Twenty suites, no framework — each is a standalone script that prints
+Twenty-one suites, no framework — each is a standalone script that prints
 `N pass, M fail` and exits non-zero. They run in separate processes because
 several install a global `document` (jsdom) or a global `fetch` stub.
 [`tests/run-all.mjs`](tests/run-all.mjs) discovers them by glob, so a new file is
@@ -304,6 +337,7 @@ The interesting ones:
 | `audio` | the Float32 → int16 → base64 chain, bit for bit, including clipping |
 | `stream-json` | JSON reassembled from SSE fragments cut mid-character |
 | `office` | that 1200 rows survive, and that Excel dates are not numbers |
+| `endpoint-url` | every provider's API-root shape, joined correctly |
 
 `overlay-css` exists because of a bug worth remembering: the recording strip
 stayed visible after dictation finished. The JavaScript was correct —
@@ -316,9 +350,13 @@ A unit test of the JS passed. The test now extracts the real CSS from
 
 ## Deliberate limitations
 
-- **No options page.** The endpoints and the model are frozen constants. An
-  internal tool does not benefit from users pointing it at arbitrary servers,
-  and it removes a whole class of "it stopped working" support.
+- **Only four things are configurable.** The endpoints, the model and the API
+  key, because those are what a new machine needs. Not the temperature, the
+  token budgets or the system prompt: those were tuned against the safety tests
+  in this repository, and a UI control over them would be a UI control over
+  whether the guards hold. `CONFIGURABLE` in
+  [lib/settings.js](lib/settings.js) is the whole list, and a test asserts the
+  system prompt is not on it.
 - **Prompts are English.** The output language is one exported constant
   (`OUTPUT_LANGUAGE` in `lib/prompt-templates.js`); the chat's reply language is
   a separate user setting. In the original deployment both were Lithuanian,

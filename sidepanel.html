@@ -110,7 +110,7 @@
     transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
   }
   .ghost-btn:hover { color: var(--color-ink); border-color: var(--color-rule-2); }
-  /* „+ New" — vyno spalvos kaip Send */
+  /* "+ New" — the same wine colour as Send */
   #newBtn { background: var(--color-action); color: var(--color-action-ink); border: none;
     font-weight: 650; box-shadow: var(--shadow-sm); }
   #newBtn:hover { background: var(--color-action-2); color: var(--color-action-ink); }
@@ -337,6 +337,24 @@
     transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out); }
   .ghost-wide:hover:not(:disabled) { color: var(--color-ink); border-color: var(--color-rule-2); }
   .ghost-wide:disabled { opacity: 0.5; cursor: default; }
+
+  /* Settings: stacked label/input pairs need the breathing room that the
+     side-by-side `.row` layout gets from its own margin. Scoped to direct
+     children so inputs inside a `.row > div` are untouched. */
+  .pane > input { margin-bottom: var(--space-xs); }
+  .pane > input + label.field { margin-top: var(--space-xs); }
+  .pane p.lead code { font-family: var(--font-mono); font-size: var(--text-xs);
+    background: var(--color-paper-3); border-radius: 3px; padding: 1px 4px; }
+  /* The backend status can run to a couple of lines (a model-name mismatch
+     lists what the server does offer), so the dot aligns to the first line. */
+  #backendStatus { align-items: flex-start; margin: var(--space-xs) 0; }
+  #backendStatus .dot { margin-top: 5px; }
+  #backendStatus .status-text { line-height: 1.45; }
+  .warn-box { margin: var(--space-xs) 0; padding: var(--space-xs) 10px;
+    border: 1px solid var(--color-danger); border-radius: var(--radius-input);
+    background: var(--color-paper-2); color: var(--color-ink-2);
+    font-size: var(--text-xs); line-height: 1.5; }
+  .warn-box b { color: var(--color-danger); }
   .fields { list-style: none; margin: 0; padding: 0; }
   .fields li { margin-bottom: var(--space-2xs); }
   .fields .empty { color: var(--color-ink-3); font-size: var(--text-sm); padding: var(--space-2xs) 0; }
@@ -382,7 +400,7 @@
     </div>
 
     <div class="banner" id="connBanner">
-      <span><b>Model server unavailable.</b> Check that it is running and reachable.</span>
+      <span><b>Model server unavailable.</b> <span id="connReason">Check the endpoint in Settings ⚙.</span></span>
       <button id="connSetup">Retry</button>
     </div>
 
@@ -491,7 +509,46 @@
   <section class="view" data-view="settings" id="settings">
     <div class="pane">
       <h2>Settings</h2>
-      <p class="lead">Answers come from the configured model server. Nothing is stored on a server.</p>
+
+      <h3>Model server</h3>
+      <p class="lead">
+        Any OpenAI-compatible endpoint: a local server (vLLM, llama.cpp, Ollama,
+        LM Studio) or a hosted provider. Paste either the server root — the
+        <code>/v1/chat/completions</code> path is appended — or the full
+        chat-completions URL if the provider puts it somewhere else.
+      </p>
+      <label class="field" for="llmEndpoint">Endpoint</label>
+      <input id="llmEndpoint" type="text" spellcheck="false" autocapitalize="off"
+        placeholder="http://localhost:8000">
+      <label class="field" for="llmModel">Model</label>
+      <input id="llmModel" type="text" spellcheck="false" autocapitalize="off"
+        placeholder="model name as the server reports it">
+      <label class="field" for="llmKey">API key</label>
+      <input id="llmKey" type="password" spellcheck="false" autocomplete="off"
+        placeholder="leave empty for a local server">
+
+      <div id="backendWarn" class="warn-box" hidden>
+        <b>This endpoint is not on this machine.</b> Page text, screenshots and
+        documents you ask about will be sent to it. Do not point it at a
+        third-party service when working with real patient data.
+      </div>
+
+      <div id="backendStatus" class="status-row">
+        <span class="dot" data-state="unknown"></span>
+        <span class="status-text">Not tested yet.</span>
+      </div>
+      <button id="backendTest" class="primary-btn">Test connection</button>
+      <button id="backendReset" class="ghost-wide">Restore defaults</button>
+
+      <h3>Dictation server</h3>
+      <p class="lead">
+        Speech-to-text, used only by dictation. Everything else works without it.
+      </p>
+      <label class="field" for="asrEndpoint">Endpoint</label>
+      <input id="asrEndpoint" type="text" spellcheck="false" autocapitalize="off"
+        placeholder="http://localhost:8001">
+
+      <h3>Answers</h3>
       <div class="row">
         <div>
           <label class="field" for="lang">Answer language</label>
